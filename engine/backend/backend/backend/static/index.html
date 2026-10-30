@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PhishGuard</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f2f4f8; margin: 0; padding: 30px; }
+    .container { max-width: 700px; margin: auto; }
+    h1 { text-align: center; }
+    .card { background: #fff; padding: 20px; border-radius: 10px;
+            box-shadow: 0 2px 8px rgba(0,0,0,.1); margin-bottom: 20px; }
+    input { width: 100%; padding: 12px; font-size: 16px; box-sizing: border-box;
+            border: 1px solid #ccc; border-radius: 6px; }
+    button { margin-top: 10px; padding: 12px 24px; font-size: 16px; cursor: pointer;
+             background: #2563eb; color: #fff; border: none; border-radius: 6px; }
+    .result { display: none; border-left: 8px solid #999; }
+    .LOW    { border-color: #16a34a; background: #f0fdf4; }
+    .MEDIUM { border-color: #eab308; background: #fefce8; }
+    .HIGH   { border-color: #dc2626; background: #fef2f2; }
+    .error  { color: #dc2626; margin-top: 10px; }
+    li { margin: 4px 0; }
+    table { width: 100%; border-collapse: collapse; }
+    td, th { padding: 6px; border-bottom: 1px solid #eee; text-align: left; font-size: 14px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>🛡️ PhishGuard</h1>
+
+  <div class="card">
+    <input id="urlInput" type="text" placeholder="https://example.com">
+    <button id="analyzeBtn">Analyze</button>
+    <div id="error" class="error"></div>
+  </div>
+
+  <div id="result" class="card result">
+    <h2 id="alert"></h2>
+    <ul id="indicators"></ul>
+    <small>Yeh sirf structural signals hain, pakka saboot nahi.</small>
+  </div>
+
+  <div class="card">
+    <h3>Dashboard</h3>
+    <p id="stats">Loading...</p>
+    <h3>Recent analyses</h3>
+    <table id="history"></table>
+  </div>
+</div>
+
+<script>
+const input = document.getElementById("urlInput");
+const btn = document.getElementById("analyzeBtn");
+const errorBox = document.getElementById("error");
+const resultBox = document.getElementById("result");
+
+const LABELS = { LOW: "LOW CONCERN", MEDIUM: "MODERATE CONCERN", HIGH: "HIGHER CONCERN" };
+
+btn.addEventListener("click", analyze);
+input.addEventListener("keydown", e => { if (e.key === "Enter") analyze(); });
+
+async function analyze() {
+  errorBox.textContent = "";
+  resultBox.style.display = "none";
+  try {
+    const res = await fetch("/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: input.value })
+    });
+    const data = await res.json();
+    if (!res.ok) { errorBox.textContent = data.error || "Something went wrong"; return; }
+    showResult(data);
+    loadDashboard();
+  } catch (e) {
+    errorBox.textContent = "Server se connect nahi ho paya";
+  }
+}
+
+function showResult(data) {
+  resultBox.className = "card result " + data.risk;
+  resultBox.style.display = "block";
+  const why = data.indicators.length ? data.indicators.join(", ") : "No red flags found";
+  document.getElementById("alert").textContent = "■ " + LABELS[data.risk] + " — " + why;
+  const ul = document.getElementById("indicators");
+  ul.replaceChildren();
+  data.indicators.forEach(i => {
+    const li = document.createElement("li");
+    li.textContent = i;
+    ul.appendChild(li);
+  });
+}
+
+async function loadDashboard() {
+  try {
+    const s = await (await fetch("/stats")).json();
+    const dist = Object.entries(s.risk_distribution).map(([k, v]) => k + ": " + v).join(" | ");
+    document.getElementById("stats").textContent =
+      "Total: " + s.total + " | " + (dist || "no data");
+
+    const h = await (await fetch("/history?limit=10")).json();
+    const table = document.getElementById("history");
+    table.replaceChildren();
+    h.forEach(a => {
+      const tr = document.createElement("tr");
+      [a.id, a.url, a.risk].forEach(v => {
+        const td = document.createElement("td");
+        td.textContent = v;
+        tr.appendChild(td);
+      });
+      table.appendChild(tr);
+    });
+  } catch (e) { }
+}
+loadDashboard();
+</script>
+</body>
+</html>
+EOF
